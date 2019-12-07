@@ -30,10 +30,10 @@ recMassToFuel mass = let fuelForModule = massToFuel mass in
 testPart fuelFn mass fuel = TestLabel "test" $ TestCase (assertEqual "" fuel (fuelFn mass))
 
 testPart1 :: Int -> Int -> Test
-testPart1 mass fuel = testPart massToFuel mass fuel
+testPart1 = testPart massToFuel
 
 testPart2 :: Int -> Int -> Test
-testPart2 mass fuel = testPart recMassToFuel mass fuel
+testPart2 = testPart recMassToFuel
 
 tests = TestList [
   testPart1 12 2,
