@@ -14,19 +14,32 @@ fileContentsToMasses :: String -> [Int]
 fileContentsToMasses ms = map str2num (lines ms)
 
 processData :: String -> String
-processData d = show (sum (map massToFuel (fileContentsToMasses d)))
+processData d = show (sum (map recMassToFuel (fileContentsToMasses d)))
 
 -- Specifically, to find the fuel required for a module, take its mass, divide by three,
 -- round down, and subtract 2.
 massToFuel :: Int -> Int
 massToFuel mass = floor (realToFrac mass / 3) - 2
 
-test1 = TestCase (assertEqual "" 2 (massToFuel 12))
-test2 = TestCase (assertEqual "" 2 (massToFuel 14))
-test3 = TestCase (assertEqual "" 654 (massToFuel 1969))
-test4 = TestCase (assertEqual "" 33583 (massToFuel 100756))
+recMassToFuel :: Int -> Int
+recMassToFuel mass = let fuelForModule = massToFuel mass in
+                       if fuelForModule <= 0
+                       then 0
+                       else fuelForModule + recMassToFuel fuelForModule
+
+testPart fuelFn mass fuel = TestLabel "test" $ TestCase (assertEqual "" fuel (fuelFn mass))
+
+testPart1 :: Int -> Int -> Test
+testPart1 mass fuel = testPart massToFuel mass fuel
+
+testPart2 :: Int -> Int -> Test
+testPart2 mass fuel = testPart recMassToFuel mass fuel
+
 tests = TestList [
-  TestLabel "test" test1,
-  TestLabel "test" test2,
-  TestLabel "test" test3,
-  TestLabel "test" test4]
+  testPart1 12 2,
+  testPart1 14 2,
+  testPart1 1969 654,
+  testPart1 100756 33583,
+  testPart2 14 2,
+  testPart2 1969 966,
+  testPart2 100756 50346]
