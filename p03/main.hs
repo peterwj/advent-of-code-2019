@@ -1,14 +1,14 @@
 import Data.List
 import Data.List.Ordered
 import Data.List.Split
+import Data.Map
 import System.IO
 import Test.HUnit
 
 data Direction = U | D | L | R deriving Show
 type Operation = (Direction, Int)
-data Coord = Coord { cx :: Int, cy :: Int } deriving (Show, Eq)
-instance Ord Coord where
-  compare = compareCoords
+data Coord = Coord { cx :: Int, cy :: Int } deriving (Show, Eq, Ord)
+type CoordMap = Map Coord Bool
 
 str2Direction :: Char -> Direction
 str2Direction s = case s of
@@ -17,36 +17,40 @@ str2Direction s = case s of
                     'L' -> L
                     'R' -> R
 
-parseInstruction :: [Char] -> Operation
+parseInstruction :: String -> Operation
 parseInstruction ins = let steps =
                              read $ tail ins
                        in (str2Direction $ head ins, steps)
 
 parseWireInstructions :: String -> [Operation]
-parseWireInstructions line = map parseInstruction $ splitOn "," line
+parseWireInstructions line = Data.List.map parseInstruction $ splitOn "," line
 
 genRange :: Int -> Int -> [Int]
 genRange start end
   | start <= end = [start..end]
   | otherwise = [end..start]
 
-generateWireCoordsRec :: [Coord] -> Coord -> [Operation] -> [Coord]
+generateWireCoordsRec :: CoordMap -> Coord -> [Operation] -> CoordMap
 generateWireCoordsRec path _ [] = path
 generateWireCoordsRec path current (op:ops) = let newPos = move current op in
   let xs = genRange (cx current) (cx newPos) in
     let ys = genRange (cy current) (cy newPos) in
       let intermediateCoords = [Coord x y | x <- xs, y <- ys] in
-        -- drop the first member since it's the same as the last member in the last
-        -- recursive calll.
-        generateWireCoordsRec (path ++ (tail intermediateCoords)) newPos ops
+        -- drop the first member of intermediateCoords since it's the same as the last
+        -- member in the last recursive call.
+        let updatedPath = Data.List.foldl (
+              \currPath coord -> Data.Map.insert coord True currPath
+              ) path (tail intermediateCoords)
+        in
+          generateWireCoordsRec updatedPath newPos ops
 
 move :: Coord -> Operation -> Coord
 move current op = let stepSize = snd op in
   case fst op of
-    U -> Coord (cx current) ((cy current) + stepSize)
-    D -> Coord (cx current) ((cy current) - stepSize)
-    L -> Coord ((cx current) - stepSize) (cy current)
-    R -> Coord ((cx current) + stepSize) (cy current)
+    U -> Coord (cx current) (cy current + stepSize)
+    D -> Coord (cx current) (cy current - stepSize)
+    L -> Coord (cx current - stepSize) (cy current)
+    R -> Coord (cx current + stepSize) (cy current)
 
 testMove :: Coord -> Operation -> Coord -> Test
 testMove current op expectedEnd =
@@ -61,34 +65,31 @@ compareCoords c1 c2 = let score1 = scoreCoord c1 in
         then GT
         else EQ
 
-generateWireCoords :: [Operation] -> [Coord]
-generateWireCoords ops =  sortBy compareCoords $ generateWireCoordsRec [] (Coord 0 0) ops
---generateWireCoords ops = take 100000 $ sortBy compareCoords $  generateWireCoordsRec [] (Coord 0 0) ops
+generateWireCoords :: [Operation] -> CoordMap
+generateWireCoords = generateWireCoordsRec empty (Coord 0 0)
 
-findIntersections :: [Operation] -> [Operation] -> [Coord]
-findIntersections ops1 ops2 = intersect (generateWireCoords ops1) (generateWireCoords ops2)
---findIntersections ops1 ops2 = intersect (generateWireCoords ops1) (generateWireCoords ops2)
+findIntersections :: [Operation] -> [Operation] -> CoordMap
+findIntersections ops1 ops2 = intersection (generateWireCoords ops1) (generateWireCoords ops2)
 
-findClosestCrossFoldFn :: Coord -> Coord -> Coord
-findClosestCrossFoldFn currMin coord = (if scoreCoord coord < scoreCoord currMin
-                      then coord
-                      else currMin)
+findClosestCrossFoldFn :: Coord -> Coord -> Bool -> Coord
+findClosestCrossFoldFn currMin keyCoord _ = if scoreCoord keyCoord < scoreCoord currMin
+                      then keyCoord
+                      else currMin
 
 sentinelCoord = Coord 1000000000 1000000000
 
 findClosestCross :: [Operation] -> [Operation] -> Coord
---findClosestCross ops1 ops2 = head $ findIntersections ops1 ops2
-findClosestCross ops1 ops2 = foldl findClosestCrossFoldFn sentinelCoord (findIntersections ops1 ops2)
+findClosestCross ops1 ops2 = foldlWithKey findClosestCrossFoldFn sentinelCoord (findIntersections ops1 ops2)
 
 scoreCoord :: Coord -> Int
-scoreCoord coord = (abs $ (cx coord)) + (abs $ (cy coord))
+scoreCoord coord = abs (cx coord) + abs (cy coord)
 
 testFindClosestCross ops1 ops2 expectedResult =
   TestCase (assertEqual "" expectedResult (scoreCoord $ findClosestCross ops1 ops2))
 
 processData :: String -> String
 processData d = let wireData = lines d in
-  let wire1Ops = parseWireInstructions $ wireData!!0 in
+  let wire1Ops = parseWireInstructions $ head wireData in
     let wire2Ops = parseWireInstructions $ wireData!!1 in
       show $ scoreCoord $ findClosestCross wire1Ops wire2Ops
 
