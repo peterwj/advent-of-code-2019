@@ -7,7 +7,8 @@ data Mode = Immediate | Position deriving (Show, Eq)
 data Modes = Modes { first :: Mode, second :: Mode, third :: Mode }
 data ComputerState = ComputerState {
   csMemory :: [Int],
-  csOutput :: [Int]
+  csOutput :: [Int],
+  csIp :: Int
   } deriving (Eq, Show)
 
 type ParsedOp = (Op, Modes)
@@ -75,46 +76,46 @@ parseOp :: Int -> ParsedOp
 parseOp op = (parseOpcode op, parseMode op)
 
 -- applies op to memory, returning the new memory
-applyOperator :: Int -> ParsedOp -> ComputerState -> ComputerState
-applyOperator ip (opcode, modes) state = let memory = csMemory state in
-  let output = csOutput state in
-    case opcode of
-      Add -> ComputerState (applyArithOperator ip memory (+) modes) output
-      Multiply -> ComputerState (applyArithOperator ip memory (*) modes) output
-      Input -> let destPtr = memory!!(ip+1) in
-        ComputerState (replaceNth destPtr inputVal memory) output
-      Output -> let ptr = memory!!(ip+1) in
-        ComputerState memory (output ++ [memory!!ptr])
+applyOperator :: ParsedOp -> ComputerState -> ComputerState
+applyOperator (opcode, modes) state = let memory = csMemory state in
+  let ip = csIp state in
+    let newIp = nextIp ip opcode in
+      let output = csOutput state in
+        case opcode of
+          Add -> ComputerState (applyArithOperator ip memory (+) modes) output newIp
+          Multiply -> ComputerState (applyArithOperator ip memory (*) modes) output newIp
+          Input -> let destPtr = memory!!(ip+1) in
+            ComputerState (replaceNth destPtr inputVal memory) output newIp
+          Output -> let ptr = memory!!(ip+1) in
+            ComputerState memory (output ++ [memory!!ptr]) newIp
 
-runComputer :: Int -> ComputerState -> ComputerState
-runComputer ip state =
-  let memory = csMemory state in
-    let encodedOp = memory!!ip in
-      let (opcode, modes) = parseOp encodedOp in
-        if opcode == Halt
-        then state
-        else let newState = applyOperator ip (opcode, modes) state in
-          let newIp = nextIp ip opcode in
-            runComputer newIp newState
+runComputer :: ComputerState -> ComputerState
+runComputer state =
+  let ip = csIp state in
+    let memory = csMemory state in
+      let encodedOp = memory!!ip in
+        let (opcode, modes) = parseOp encodedOp in
+          if opcode == Halt
+          then state
+          else let newState = applyOperator (opcode, modes) state in
+              runComputer newState
 
 testPart1 :: [Int] -> ComputerState -> Test
-testPart1 inputMemory expectedState = let expectedMemory = csMemory expectedState in
-  let expectedOutput = csOutput expectedState in
-    TestLabel "test" $ TestCase (
-    assertEqual "" (ComputerState expectedMemory expectedOutput)
-    (runComputer 0 (ComputerState inputMemory []))
+testPart1 inputMemory expectedState = TestLabel "test" $ TestCase (
+    assertEqual "" expectedState
+    (runComputer (ComputerState inputMemory [] 0))
   )
 
 tests = TestList [
   (testReplaceWith [1,2] 100 0 [100,2]),
   (testReplaceWith [1,2] 100 1 [1,100]),
   (testApplyOperator 0 [1,0,0,0] (+) [2,0,0,0]),
-  (testPart1 [99]         (ComputerState [99] [])),
-  (testPart1 [1,0,0,0,99] (ComputerState [2,0,0,0,99] [])),
-  (testPart1 [2,3,0,3,99] (ComputerState [2,3,0,6,99] [])),
-  (testPart1 [1,9,10,3,2,3,11,0,99,30,40,50] (ComputerState [3500,9,10,70,2,3,11,0,99,30,40,50] [])),
-  (testPart1 [1002,4,3,4,33] (ComputerState [1002,4,3,4,99] [])),
-  (testPart1 [3,0,4,0,99] (ComputerState [1,0,4,0,99] [inputVal]))
+  (testPart1 [99]         (ComputerState [99] [] 0 )),
+  (testPart1 [1,0,0,0,99] (ComputerState [2,0,0,0,99] [] 4 )),
+  (testPart1 [2,3,0,3,99] (ComputerState [2,3,0,6,99] [] 4 )),
+  (testPart1 [1,9,10,3,2,3,11,0,99,30,40,50] (ComputerState [3500,9,10,70,2,3,11,0,99,30,40,50] [] 8 )),
+  (testPart1 [1002,4,3,4,33] (ComputerState [1002,4,3,4,99] [] 4)),
+  (testPart1 [3,0,4,0,99] (ComputerState [1,0,4,0,99] [inputVal] 4))
                  ]
 
 
