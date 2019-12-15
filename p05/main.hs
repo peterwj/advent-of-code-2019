@@ -1,14 +1,15 @@
 import Test.HUnit
 import Text.Printf
 
-data Op = Add | Multiply | Input | Output | Halt deriving (Show, Eq)
+data Op = Add | Multiply | Input | Output | Halt | JT | JF | LT | Eq deriving (Show, Eq)
 data Mode = Immediate | Position deriving (Show, Eq)
 
 data Modes = Modes { first :: Mode, second :: Mode, third :: Mode }
 data ComputerState = ComputerState {
   csMemory :: [Int],
   csOutput :: [Int],
-  csIp :: Int
+  csIp :: Int,
+  csInputBuffer :: [Int]
   } deriving (Eq, Show)
 
 type ParsedOp = (Op, Modes)
@@ -81,13 +82,14 @@ applyOperator (opcode, modes) state = let memory = csMemory state in
   let ip = csIp state in
     let newIp = nextIp ip opcode in
       let output = csOutput state in
-        case opcode of
-          Add -> ComputerState (applyArithOperator ip memory (+) modes) output newIp
-          Multiply -> ComputerState (applyArithOperator ip memory (*) modes) output newIp
-          Input -> let destPtr = memory!!(ip+1) in
-            ComputerState (replaceNth destPtr inputVal memory) output newIp
-          Output -> let ptr = memory!!(ip+1) in
-            ComputerState memory (output ++ [memory!!ptr]) newIp
+        let inputBuffer = csInputBuffer state in
+          case opcode of
+            Add -> ComputerState (applyArithOperator ip memory (+) modes) output newIp inputBuffer
+            Multiply -> ComputerState (applyArithOperator ip memory (*) modes) output newIp inputBuffer
+            Input -> let destPtr = memory!!(ip+1) in
+              ComputerState (replaceNth destPtr inputVal memory) output newIp (tail inputBuffer)
+            Output -> let ptr = memory!!(ip+1) in
+              ComputerState memory (output ++ [memory!!ptr]) newIp inputBuffer
 
 runComputer :: ComputerState -> ComputerState
 runComputer state =
@@ -103,19 +105,25 @@ runComputer state =
 testPart1 :: [Int] -> ComputerState -> Test
 testPart1 inputMemory expectedState = TestLabel "test" $ TestCase (
     assertEqual "" expectedState
-    (runComputer (ComputerState inputMemory [] 0))
+    (runComputer (ComputerState inputMemory [] 0 [1]))
+  )
+
+testPart2 :: [Int] -> Int -> [Int] -> Test
+testPart2 inputMem expectedInput expectedOutput = let state = ComputerState inputMem [] 0 [expectedInput] in
+  TestLabel "test" $ TestCase (
+    assertEqual "" (csOutput $ runComputer state) expectedOutput
   )
 
 tests = TestList [
   (testReplaceWith [1,2] 100 0 [100,2]),
   (testReplaceWith [1,2] 100 1 [1,100]),
   (testApplyOperator 0 [1,0,0,0] (+) [2,0,0,0]),
-  (testPart1 [99]         (ComputerState [99] [] 0 )),
-  (testPart1 [1,0,0,0,99] (ComputerState [2,0,0,0,99] [] 4 )),
-  (testPart1 [2,3,0,3,99] (ComputerState [2,3,0,6,99] [] 4 )),
-  (testPart1 [1,9,10,3,2,3,11,0,99,30,40,50] (ComputerState [3500,9,10,70,2,3,11,0,99,30,40,50] [] 8 )),
-  (testPart1 [1002,4,3,4,33] (ComputerState [1002,4,3,4,99] [] 4)),
-  (testPart1 [3,0,4,0,99] (ComputerState [1,0,4,0,99] [inputVal] 4))
+  (testPart1 [99]         (ComputerState [99] [] 0 [1])),
+  (testPart1 [1,0,0,0,99] (ComputerState [2,0,0,0,99] [] 4 [1])),
+  (testPart1 [2,3,0,3,99] (ComputerState [2,3,0,6,99] [] 4 [1])),
+  (testPart1 [1,9,10,3,2,3,11,0,99,30,40,50] (ComputerState [3500,9,10,70,2,3,11,0,99,30,40,50] [] 8 [1])),
+  (testPart1 [1002,4,3,4,33] (ComputerState [1002,4,3,4,99] [] 4 [1] )),
+  (testPart1 [3,0,4,0,99] (ComputerState [1,0,4,0,99] [inputVal] 4 []))
                  ]
 
 
